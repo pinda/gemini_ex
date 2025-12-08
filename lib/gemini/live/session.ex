@@ -543,7 +543,7 @@ defmodule Gemini.Live.Session do
   end
 
   defp build_websocket_url_and_headers(state) do
-    case MultiAuthCoordinator.coordinate_auth(state.auth_strategy, Enum.into(state.config, %{})) do
+    case MultiAuthCoordinator.coordinate_auth(state.auth_strategy, state.config) do
       {:ok, auth_strategy, headers} ->
         url = build_live_api_url(state.model, auth_strategy, state.config)
         {:ok, url, headers}
