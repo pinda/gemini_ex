@@ -556,7 +556,7 @@ defmodule Gemini.Live.Session do
   defp build_live_api_url(_model, :gemini, config) do
     api_key = Config.api_key() || Keyword.get(config, :api_key)
 
-    "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=#{api_key}"
+    "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=#{api_key}"
   end
 
   defp build_live_api_url(_model, :vertex_ai, config) do
