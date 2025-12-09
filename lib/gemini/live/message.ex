@@ -49,6 +49,8 @@ defmodule Gemini.Live.Message do
     - `system_instruction`: System instruction
     - `tools`: Available tools/functions
     - `tool_config`: Tool configuration
+    - `input_audio_transcription`: Input audio transcription config
+    - `output_audio_transcription`: Output audio transcription config
     """
 
     field(:model, String.t(), enforce: true)
@@ -56,6 +58,8 @@ defmodule Gemini.Live.Message do
     field(:system_instruction, String.t() | Content.t() | map())
     field(:tools, [map()])
     field(:tool_config, map())
+    field(:input_audio_transcription, map())
+    field(:output_audio_transcription, map())
   end
 
   typedstruct module: ClientContent do
@@ -301,6 +305,20 @@ defmodule Gemini.Live.Message do
     api =
       if setup.tool_config do
         Map.put(api, :toolConfig, setup.tool_config)
+      else
+        api
+      end
+
+    api =
+      if setup.input_audio_transcription do
+        Map.put(api, :inputAudioTranscription, setup.input_audio_transcription)
+      else
+        api
+      end
+
+    api =
+      if setup.output_audio_transcription do
+        Map.put(api, :outputAudioTranscription, setup.output_audio_transcription)
       else
         api
       end

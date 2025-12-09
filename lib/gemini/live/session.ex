@@ -394,24 +394,22 @@ defmodule Gemini.Live.Session do
       ) do
     Logger.info("WebSocket upgrade successful")
 
-    # Send setup message
-    setup_message = build_setup_message(state)
+    # For Vertex AI, send service setup (auth) message first
+    with setup_message <- build_setup_message(state),
+         :ok <- send_websocket_message(state, setup_message) do
+      # Start ping timer
+      ping_timer = Process.send_after(self(), :send_ping, @ping_interval)
 
-    case send_websocket_message(state, setup_message) do
-      :ok ->
-        # Start ping timer
-        ping_timer = Process.send_after(self(), :send_ping, @ping_interval)
+      new_state = %{
+        state
+        | status: :connected,
+          setup_sent: true,
+          ping_timer: ping_timer
+      }
 
-        new_state = %{
-          state
-          | status: :connected,
-            setup_sent: true,
-            ping_timer: ping_timer
-        }
-
-        invoke_callback(state.on_connect, nil)
-        {:noreply, new_state}
-
+      invoke_callback(state.on_connect, nil)
+      {:noreply, new_state}
+    else
       {:error, reason} ->
         Logger.error("Failed to send setup message: #{inspect(reason)}")
         invoke_callback(state.on_error, reason)
@@ -427,14 +425,19 @@ defmodule Gemini.Live.Session do
           stream_ref: stream_ref
         } = state
       ) do
-    case Message.from_json(text) do
-      {:ok, message} ->
-        handle_server_message(message, state)
+    handle_ws_message(text, state)
+  end
 
-      {:error, reason} ->
-        Logger.error("Failed to parse WebSocket message: #{inspect(reason)}")
-        {:noreply, state}
-    end
+  @impl true
+  def handle_info(
+        {:gun_ws, conn_pid, stream_ref, {:binary, data}},
+        %{
+          conn_pid: conn_pid,
+          stream_ref: stream_ref
+        } = state
+      ) do
+    # Vertex AI sends binary frames containing JSON
+    handle_ws_message(data, state)
   end
 
   @impl true
@@ -561,13 +564,12 @@ defmodule Gemini.Live.Session do
 
   defp build_live_api_url(_model, :vertex_ai, config) do
     vertex_config = Config.get_auth_config(:vertex_ai)
-    project_id = Keyword.get(config, :project_id) || Map.get(vertex_config, :project_id)
 
     location =
-      Keyword.get(config, :location, "us-central1") ||
+      Keyword.get(config, :location) ||
         Map.get(vertex_config, :location, "us-central1")
 
-    "wss://#{location}-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent?project=#{project_id}&location=#{location}"
+    "wss://#{location}-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent"
   end
 
   defp connect_websocket(url, headers) do
@@ -599,21 +601,54 @@ defmodule Gemini.Live.Session do
     end
   end
 
+  defp handle_ws_message(data, state) do
+    case Message.from_json(data) do
+      {:ok, message} ->
+        handle_server_message(message, state)
+
+      {:error, reason} ->
+        Logger.error("Failed to parse WebSocket message: #{inspect(reason)}")
+        {:noreply, state}
+    end
+  end
+
   defp build_setup_message(state) do
+    model_uri = build_model_uri(state.model, state.auth_strategy, state.config)
+
     setup = %LiveClientSetup{
-      model: state.model,
+      model: model_uri,
       generation_config: Keyword.get(state.config, :generation_config),
       system_instruction: Keyword.get(state.config, :system_instruction),
       tools: Keyword.get(state.config, :tools),
-      tool_config: Keyword.get(state.config, :tool_config)
+      tool_config: Keyword.get(state.config, :tool_config),
+      input_audio_transcription: Keyword.get(state.config, :input_audio_transcription),
+      output_audio_transcription: Keyword.get(state.config, :output_audio_transcription)
     }
 
     %ClientMessage{setup: setup}
   end
 
+  defp build_model_uri(model, :gemini, _config) do
+    # For Gemini API, use the model name with the "models/" prefix
+    "models/#{model}"
+  end
+
+  defp build_model_uri(model, :vertex_ai, config) do
+    # For Vertex AI, use the full resource path
+    vertex_config = Config.get_auth_config(:vertex_ai)
+    project_id = Keyword.get(config, :project_id) || Map.get(vertex_config, :project_id)
+
+    location =
+      Keyword.get(config, :location, "us-central1") ||
+        Map.get(vertex_config, :location, "us-central1")
+
+    "projects/#{project_id}/locations/#{location}/publishers/google/models/#{model}"
+  end
+
   defp send_websocket_message(state, %ClientMessage{} = message) do
     case Message.to_json(message) do
       {:ok, json} ->
+        Logger.info("Sending WebSocket message: #{json}")
         :gun.ws_send(state.conn_pid, state.stream_ref, {:text, json})
         :ok
 
