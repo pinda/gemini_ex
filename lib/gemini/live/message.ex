@@ -51,6 +51,20 @@ defmodule Gemini.Live.Message do
     - `tool_config`: Tool configuration
     - `input_audio_transcription`: Input audio transcription config
     - `output_audio_transcription`: Output audio transcription config
+    - `proactivity`: Proactivity configuration (e.g., `%{proactive_audio: true}`)
+    - `realtime_input_config`: Real-time input configuration including automatic activity detection
+
+    ## Realtime Input Config Example
+
+        %{
+          automatic_activity_detection: %{
+            disabled: false,
+            start_of_speech_sensitivity: :start_sensitivity_low,
+            end_of_speech_sensitivity: :end_sensitivity_low,
+            prefix_padding_ms: 20,
+            silence_duration_ms: 100
+          }
+        }
     """
 
     field(:model, String.t(), enforce: true)
@@ -60,6 +74,8 @@ defmodule Gemini.Live.Message do
     field(:tool_config, map())
     field(:input_audio_transcription, map())
     field(:output_audio_transcription, map())
+    field(:proactivity, map())
+    field(:realtime_input_config, map())
   end
 
   typedstruct module: ClientContent do
@@ -279,52 +295,22 @@ defmodule Gemini.Live.Message do
   # Private helpers
 
   defp setup_to_api(%LiveClientSetup{} = setup) do
-    api = %{model: setup.model}
-
-    api =
-      if setup.generation_config do
-        Map.put(api, :generationConfig, setup.generation_config)
-      else
-        api
-      end
-
-    api =
-      if setup.system_instruction do
-        Map.put(api, :systemInstruction, format_system_instruction(setup.system_instruction))
-      else
-        api
-      end
-
-    api =
-      if setup.tools do
-        Map.put(api, :tools, setup.tools)
-      else
-        api
-      end
-
-    api =
-      if setup.tool_config do
-        Map.put(api, :toolConfig, setup.tool_config)
-      else
-        api
-      end
-
-    api =
-      if setup.input_audio_transcription do
-        Map.put(api, :inputAudioTranscription, setup.input_audio_transcription)
-      else
-        api
-      end
-
-    api =
-      if setup.output_audio_transcription do
-        Map.put(api, :outputAudioTranscription, setup.output_audio_transcription)
-      else
-        api
-      end
-
-    api
+    %{model: setup.model}
+    |> maybe_put(:generationConfig, setup.generation_config)
+    |> maybe_put(:systemInstruction, setup.system_instruction, &format_system_instruction/1)
+    |> maybe_put(:tools, setup.tools)
+    |> maybe_put(:toolConfig, setup.tool_config)
+    |> maybe_put(:inputAudioTranscription, setup.input_audio_transcription)
+    |> maybe_put(:outputAudioTranscription, setup.output_audio_transcription)
+    |> maybe_put(:proactivity, setup.proactivity)
+    |> maybe_put(:realtimeInputConfig, setup.realtime_input_config)
   end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  defp maybe_put(map, _key, nil, _transform), do: map
+  defp maybe_put(map, key, value, transform), do: Map.put(map, key, transform.(value))
 
   defp content_to_api(%ClientContent{} = content) do
     %{

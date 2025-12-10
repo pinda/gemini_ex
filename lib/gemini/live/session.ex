@@ -140,6 +140,7 @@ defmodule Gemini.Live.Session do
   - `:system_instruction` - System instruction
   - `:tools` - Available tools/functions
   - `:tool_config` - Tool configuration
+  - `:proactivity` - Proactivity configuration (e.g., `%{proactive_audio: true}`)
   - `:on_message` - Callback when message received
   - `:on_connect` - Callback when connected
   - `:on_disconnect` - Callback when disconnected
@@ -150,6 +151,14 @@ defmodule Gemini.Live.Session do
 
       {:ok, session} = LiveSession.start_link(
         model: "gemini-2.0-flash-exp",
+        on_message: &handle_message/1
+      )
+
+      # With proactive audio (requires v1alpha API version)
+      {:ok, session} = LiveSession.start_link(
+        model: "gemini-2.0-flash-exp",
+        proactivity: %{proactive_audio: true},
+        generation_config: %{response_modalities: ["AUDIO"]},
         on_message: &handle_message/1
       )
   """
@@ -622,7 +631,9 @@ defmodule Gemini.Live.Session do
       tools: Keyword.get(state.config, :tools),
       tool_config: Keyword.get(state.config, :tool_config),
       input_audio_transcription: Keyword.get(state.config, :input_audio_transcription),
-      output_audio_transcription: Keyword.get(state.config, :output_audio_transcription)
+      output_audio_transcription: Keyword.get(state.config, :output_audio_transcription),
+      proactivity: Keyword.get(state.config, :proactivity),
+      realtime_input_config: Keyword.get(state.config, :realtime_input_config)
     }
 
     %ClientMessage{setup: setup}
