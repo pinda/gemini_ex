@@ -392,7 +392,7 @@ defmodule Gemini.Live.Session do
         {:gun_upgrade, conn_pid, stream_ref, ["websocket"], _headers},
         %{conn_pid: conn_pid, stream_ref: stream_ref} = state
       ) do
-    Logger.info("WebSocket upgrade successful")
+    Logger.debug("WebSocket upgrade successful")
 
     # For Vertex AI, send service setup (auth) message first
     with setup_message <- build_setup_message(state),
@@ -496,7 +496,7 @@ defmodule Gemini.Live.Session do
 
   @impl true
   def handle_info(:reconnect, state) do
-    Logger.info("Attempting to reconnect...")
+    Logger.debug("Attempting to reconnect...")
 
     case do_connect(state) do
       {:ok, new_state} ->
@@ -648,7 +648,7 @@ defmodule Gemini.Live.Session do
   defp send_websocket_message(state, %ClientMessage{} = message) do
     case Message.to_json(message) do
       {:ok, json} ->
-        Logger.info("Sending WebSocket message: #{json}")
+        Logger.debug("Sending WebSocket message: #{json}")
         :gun.ws_send(state.conn_pid, state.stream_ref, {:text, json})
         :ok
 
@@ -665,7 +665,7 @@ defmodule Gemini.Live.Session do
     new_state =
       cond do
         message.setup_complete ->
-          Logger.info("Setup complete")
+          Logger.debug("Setup complete")
           # Flush queued messages
           flush_message_queue(%{state | setup_complete: true})
 
